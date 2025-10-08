@@ -1,0 +1,11 @@
+fish def checkError(rad_, tan_, disp_)
+  if errsr > rad_ then
+    system.error = 'Radial stress error is ' + string(errsr)
+  end_if
+  if errst > tan_ then 
+    system.error = 'Tangential stress error is ' + string(errst)
+  end_if
+  if errd > disp_ then
+    system.error = 'Displacement error error is ' + string(errd)
+  end_if
+end

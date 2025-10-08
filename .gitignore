@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 3DEC Files
+*.sav
+*.log
+*.out
+
+# 3DEC保存文件（二进制，通常很大）
+*.sav
+
+# 3DEC导出的临时文本文件
+Elastic_Hole/nodes.txt
+Elastic_Hole/displacement.txt
+Elastic_Hole/stress.txt
+Elastic_Hole/boundary_hole.txt
+Elastic_Hole/boundary_far.txt
+Elastic_Hole/export_3dec_data.fis
+
+# Large weight files (可程序生成)
+PINNs/Utilities/IRK_weights/
+
+# 模型训练输出
+*.h5
+*.hdf5
+*.ckpt
+*.pth
+models/
+checkpoints/
+
+# 结果和图表（可选，如果想保留结果请删除这些行）
+# figures/
+# *.png
+# *.pdf
+
+# 数据文件（如果过大）
+# *.mat
+
+# 临时文件
+*.tmp
+temp/
+tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,27 @@
+;----------------------------------------------;
+;                  Master File                 ;
+;----------------------------------------------;
+
+;HEX ZONES
+program call 'ElasticHole-Hex'
+program call 'check.fis' 
+[checkError(1.2,1.8,4.1)]
+plot 'Blocks' export bitmap filename "blocks-hex.png"
+plot 'RadialDisp' export bitmap filename "disp-hex.png"
+plot 'Stress' export bitmap filename "stress-hex.png"
+
+;TETRAHEDRAL ZONES
+program call 'ElasticHole-tet'
+program call 'check.fis' 
+[checkError(2.2,2.7,4.2)]
+plot 'Blocks' export bitmap filename "blocks-tet.png"
+plot 'RadialDisp' export bitmap filename "disp-tet.png"
+plot 'Stress' export bitmap filename "stress-tet.png"
+
+;HIGH-ORDER TETRAHEDRAL ZONES
+program call 'ElasticHole-HO'
+program call 'check.fis'
+[checkError(2.4,2.1,4.3)]
+plot 'Blocks' export bitmap filename "blocks-HO.png"
+plot 'RadialDisp' export bitmap filename "disp-HO.png"
+plot 'Stress' export bitmap filename "stress-HO.png"

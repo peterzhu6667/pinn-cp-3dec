@@ -1,0 +1,52 @@
+;==========================================================================
+; verification test -- 3dec modeling cylindrical hole in an infinite,
+;                      isotropic, homogeneous, elastic medium
+; tetrahedral zoning --- higher order zones
+; elastic blocks
+;
+;==========================================================================
+model new
+model config highorder
+
+model large-strain off
+
+block create tunnel dip 0 dip-direction 00 radius 1 length 0 1 ...
+                    blocks-axial 1 blocks-radial 4 blocks-tangential 5 ...
+                    boundary 9 radius-ratio 1.4
+block delete range cylinder end-1 0 0 0 end-2 0 1 0 radius 0 1
+block delete range plane dip 0 dip-direction 0 below
+block delete range plane dip 90 dip-direction 90 below
+
+block join on
+
+; --- zoning of blocks ---
+block zone generate edgelength 1.0
+block zone generate high-order-tetra
+;
+; --- material properties ---
+;
+block zone cmodel assign elastic
+block zone property bulk 3.9e9 shear 2.8e9 density 2600 
+
+;
+; --- boundary conditions ---
+block face apply stress -30e6 -30e6 -15e6 0 0 0 range position-x 10
+block face apply stress -30e6 -30e6 -15e6 0 0 0 range position-z 10
+block gridpoint apply velocity-x 0 range position-x 0
+block gridpoint apply velocity-y 0 range position-y 0
+block gridpoint apply velocity-y 0 range position-y 1
+block gridpoint apply velocity-z 0 range position-z 0
+;
+; --- initial conditions ---
+;
+block insitu stress -30e6 -30e6 -15e6 0 0 0
+;
+model history mechanical unbalanced-maximum
+;
+model cycle 2000
+
+program call 'ElasticHole.fis'
+
+model save 'ElasticHole-HO'
+;
+program return

@@ -1,0 +1,156 @@
+;---------------------------------------------------------------------
+;    exact and numerical solution processing for elastic hole problem
+;
+;    nastr, stores in
+;    Table 1: analytical values rad/a -sigr
+;    Table 2: analytical values rad/a -sigt
+;    Table 3: numerical values rad/a -sigr
+;             at zone centroid closest to x axis
+;    Table 4: numerical values rad/a -sigt
+;             at zone centroid closest to x axis
+;
+;    and calculates in whole grid
+;    errsr  : average %error in -sigr
+;    errst  : average %error in -sigt
+;
+;    nadis, stores in
+;    Table 5: analytical values of rad/a -ur/a
+;    Table 6: numerical  values of rad/a -ur/a at grid points on x axis
+;
+;    and calculates in whole grid
+;    errd   : average %error in modulus of displacement
+;---------------------------------------------------------------------
+fish automatic-create off
+;
+;--- access properties and stresses ---
+fish define props
+  global p1 = 30e6  ; horizontal far-field stress
+  global p2 = 15e6  ; vertical far-field stress
+  global a  = 1     ; tunnel radius
+  
+  global bm = 3.9e9
+  global sm = 2.8e9
+  global nu = (3.*bm-2.*sm)/(6.*bm+2.*sm)
+end
+; =================================================
+; Stresses
+; =================================================
+fish define nastr
+    local numrad = 0
+    local tab1  = table.get(1)
+    local tab2  = table.get(2)
+    local tab3  = table.get(3)
+    local tab4  = table.get(4)
+    table.label(tab1) = 'analytic-sigr'
+    table.label(tab2) = 'analytic-sigt'
+    table.label(tab3) = '3DEC-sigr'
+    table.label(tab4) = '3DEC-sigt'
+    global errsr
+    global errst
+    errsr = 0.0
+    errst = 0.0
+	
+    loop foreach local iz_ block.zone.list
+         local mark = 0
+         local igp
+         loop igp (1,4)
+              local gpind = block.zone.gp(iz_,igp)
+              if block.gp.pos.z(gpind) < 0.001 then
+                 mark = mark + 1
+              end_if
+         end_loop
+         
+         local rad = math.sqrt(block.zone.pos.x(iz_)^2 + ...
+                     block.zone.pos.z(iz_)^2)
+         local theta_ = math.atan2(block.zone.pos.z(iz_),block.zone.pos.x(iz_))
+         local o_r = a/rad
+         local o_r2 = o_r*o_r
+         local o_r4 = o_r2*o_r2
+
+         local sigre = 0.5*(p1+p2)*(1-o_r2)
+         sigre = sigre+0.5*(p1-p2)*(1.-4.*o_r2+3.*o_r4)*math.cos(2.0*theta_)
+
+         local sigte = 0.5*(p1+p2)*(1+o_r2)
+         sigte = sigte-0.5*(p1-p2)*(1.+3.*o_r4)*math.cos(2.0*theta_)
+         
+         local stemp1 = 0.5*(block.zone.stress.xx(iz_) + ...
+                        block.zone.stress.zz(iz_))
+         local stemp2 = 0.5*(block.zone.stress.xx(iz_) - ...
+                        block.zone.stress.zz(iz_))
+         local stemp3 = block.zone.stress.xz(iz_)*math.sin(2.0*theta_)
+         local sigr = -(stemp1 + stemp2*math.cos(2.0*theta_)+stemp3)
+         local sigt = -(stemp1 - stemp2*math.cos(2.0*theta_)-stemp3)
+ 
+         if mark > 2
+           if rad < 5.0
+              numrad = numrad + 1
+              table(tab1,rad) = sigre
+              table(tab2,rad) = sigte
+              table(tab3,rad) = sigr
+              table(tab4,rad) = sigt
+            end_if
+         end_if
+         local err = math.abs(sigr - sigre) / p1
+         errsr = errsr + err
+         err = math.abs(sigt - sigte) / p1
+         errst = errst + err
+    end_loop
+    errsr = errsr * 100. / block.zone.num
+    errst = errst * 100. / block.zone.num
+end
+; =================================================
+; Displacements
+; =================================================
+fish define nadis
+    global numrad
+    numrad = 0
+    local tab5  = table.get(5)
+    local tab6  = table.get(6)
+    table.label(tab5) = 'analytic-ur'
+    table.label(tab6) = '3DEC-ur'
+    
+    ; solution at edge for error calculation
+    local dism = 0.25*((p1+p2)+(p1-p2)*(4.*(1.-nu)-1.0))/sm
+
+    global errd = 0.0
+    local count_ = 0
+
+    loop foreach local igp_ block.gp.list
+         count_ = count_ + 1
+         local mark = 0
+         if block.gp.pos.z(igp_) < 0.001 then
+            if block.gp.pos.y(igp_) < 0.001 then
+              mark = 1
+            end_if
+         end_if
+         local rad = math.sqrt(block.gp.pos.x(igp_)^2 + block.gp.pos.z(igp_)^2)
+         local theta_ = math.atan2(block.gp.pos.z(igp_),block.gp.pos.x(igp_))
+         local o_r = a/rad
+         local dise = (p1+p2)+(p1-p2)*(4.*(1.-nu)-o_r*o_r)*math.cos(2.0*theta_)
+         dise = 0.25*dise*o_r*a/sm
+
+         local dis = math.sqrt(block.gp.disp.x(igp_)^2 + ...
+                     block.gp.disp.z(igp_)^2)
+         local err = math.abs(dis - dise)
+         errd = errd + err
+         if mark = 1 then
+           if rad < 5.0
+              numrad = numrad + 1
+              table(tab5,rad) = 100*dise
+              table(tab6,rad) = 100*dis
+            end_if
+         end_if
+    end_loop
+    errd = errd * 100. / (dism*count_)
+end
+;
+[props]
+[nastr]
+[nadis]
+;
+fish list [numrad]
+fish list [errsr]
+fish list [errst]
+fish list [errd]
+fish automatic-create on
+; eof
