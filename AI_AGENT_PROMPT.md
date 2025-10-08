@@ -15,11 +15,18 @@
 请先阅读以下文件了解项目背景：
 1. **`README.md`** - 项目总体介绍
 2. **`Elastic_Hole/project.md`** - 圆柱孔弹性力学问题的详细描述
-3. **`Elastic_Hole/ElasticHole.fis`** - 3DEC FISH脚本，包含Kirsch解析解的实现
+3. **`Elastic_Hole/ElasticHole-Hex.dat`** - 3DEC模型文件
 4. **`QUICKSTART.md`** - 项目使用指南
+5. **`PINNs/main/Data/README.md`** - 数据格式说明
 
 ### 当前问题
-文件 **`Elastic_Hole/generate_analytical_solution.py`** 中，我尝试将FISH脚本（`ElasticHole.fis`）中的Kirsch解析解公式转换为Python代码，但可能由于对FISH语言理解不准确，导致公式转换有误。
+文件 **`Elastic_Hole/export_to_pinn.py`** 中，我尝试创建一个FISH脚本来从3DEC导出数据，但由于对3DEC FISH语言理解不准确，生成的FISH脚本可能有语法错误或逻辑错误，无法正常导出数据。
+
+**具体问题**：
+- `export_to_pinn.py` 中的 `create_sample_fish_export_script()` 函数生成的FISH脚本可能有语法错误
+- 不确定3DEC的数据结构访问方式是否正确（如 `block.gp.pos.x()`, `block.zone.stress.xx()` 等）
+- 文件操作（`file.open()`, `file.write()`, `file.close()`）的语法可能不正确
+- 循环结构（`loop foreach`）的写法可能有误
 
 ---
 
@@ -27,70 +34,130 @@
 
 ### 第一步：查阅3DEC FISH语言手册
 
-**手册链接**：
-- 3DEC FISH脚本语言参考手册：https://docs.itascacg.com/3dec700/common/fish/doc/fish_language.html
-- 3DEC FISH内置函数：https://docs.itascacg.com/3dec700/common/fish/doc/fish_functions.html
-- 3DEC Zone命令：https://docs.itascacg.com/3dec700/3dec/docproject/source/manual/zone_commands/zone_commands.html
+**手册链接（请使用浏览器访问）**：
+- **3DEC FISH脚本语言参考**：https://docs.itascacg.com/3dec700/common/fish/doc/fish_language.html
+- **3DEC FISH内置函数**：https://docs.itascacg.com/3dec700/common/fish/doc/fish_functions.html
+- **3DEC Block命令参考**：https://docs.itascacg.com/3dec700/3dec/docproject/source/manual/block/block.html
+- **3DEC Zone相关命令**：https://docs.itascacg.com/3dec700/3dec/docproject/source/manual/zone_commands/zone_commands.html
+- **FISH文件I/O操作**：https://docs.itascacg.com/3dec700/common/fish/doc/fish_functions.html (搜索 "file" 相关函数)
 
 **重点查看**：
-1. FISH语言的语法规则（特别是数学运算符）
-2. 内置函数的定义（如 `math.sqrt()`, `math.atan2()`, `cos()`, `sin()` 等）
-3. 变量赋值和计算的逻辑
+1. **FISH语法规则**：
+   - 变量声明（`local` 关键字）
+   - 循环结构（`loop foreach`, `loop while`, `end_loop`）
+   - 条件语句（`if`, `then`, `end_if`）
+   - 数学运算和函数（`math.sqrt()`, `math.abs()` 等）
 
-### 第二步：理解Kirsch解析解的物理背景
+2. **3DEC数据结构访问**：
+   - 如何遍历所有gridpoint（网格点）：`block.gp.list`
+   - 如何访问gridpoint的坐标：`block.gp.pos.x()`, `block.gp.pos.y()`, `block.gp.pos.z()`
+   - 如何访问gridpoint的位移：`block.gp.disp.x()`, `block.gp.disp.y()`, `block.gp.disp.z()`
+   - 如何遍历所有zone（单元）：`block.zone.list`
+   - 如何访问zone的应力：`block.zone.stress.xx()`, `block.zone.stress.yy()` 等
 
-参考文献（已在 `Elastic_Hole/project.md` 中说明）：
-- Kirsch, G. (1898). Die Theorie der Elastizität
-- Jaeger, J.C., Cook, N.G.W. (1976). Fundamentals of Rock Mechanics
+3. **文件I/O操作**：
+   - `file.open()` 的正确语法和参数
+   - `file.write()` 如何写入数据
+   - `file.close()` 的用法
+   - 如何写入换行符
 
-**物理问题**：
-- 无限弹性介质中的圆柱孔
-- 远场应力：σ_x = 15 MPa（水平），σ_y = 30 MPa（垂直）
-- 材料：剪切模量 G = 2.8 GPa，体积模量 K = 3.9 GPa
+### 第二步：分析现有的FISH脚本示例
 
-**Kirsch解（柱坐标系）**：
-```
-径向应力: σ_r(r,θ) = f1(r,θ)
-环向应力: σ_θ(r,θ) = f2(r,θ)
-径向位移: u_r(r,θ) = f3(r,θ)
-```
+查看项目中可能存在的其他FISH脚本（如果有），了解正确的FISH代码风格。
 
-### 第三步：对比和修正
+### 第三步：对比和修正 `export_to_pinn.py`
 
-**对比内容**：
-1. 打开 `Elastic_Hole/ElasticHole.fis`，找到以下FISH函数：
-   - `nastr` - 计算应力的函数
-   - `nadis` - 计算位移的函数
+**打开文件**：`Elastic_Hole/export_to_pinn.py`
 
-2. 对比 `Elastic_Hole/generate_analytical_solution.py` 中的对应Python实现：
-   - `KirschSolution.stress_radial()`
-   - `KirschSolution.stress_tangential()`
-   - `KirschSolution.displacement_radial()`
-   - `KirschSolution.displacement_tangential()`
+**找到函数**：`create_sample_fish_export_script(output_path)`
 
-3. **特别注意**：
-   - 变量命名对应关系（如 FISH中的 `p1`, `p2`, `o_r`, `o_r2` 等）
-   - 数学公式的正确性（括号、运算符优先级）
-   - 坐标系统（FISH中使用 `x`, `y`, `z`，是否对应Python中的柱坐标 `r`, `θ`）
-   - **远场应力的对应关系**：FISH中 `p1` 和 `p2` 分别对应哪个方向的应力？
+**需要检查的关键点**：
+
+1. **FISH函数定义语法**：
+   ```fish
+   fish define export_for_pinn
+       ; 函数体
+   end
+   ```
+   - 是否缺少或多余关键字？
+   - 缩进是否正确？
+
+2. **变量声明**：
+   ```fish
+   local fp_nodes = file.open('nodes.txt', 1, 0)
+   ```
+   - `local` 关键字是否必需？
+   - `file.open()` 的参数是否正确？（查手册确认参数含义）
+
+3. **循环遍历gridpoint**：
+   ```fish
+   loop foreach local igp_ block.gp.list
+       ; 访问坐标
+       file.write(fp_nodes, block.gp.pos.x(igp_))
+       ; ...
+   end_loop
+   ```
+   - `loop foreach` 语法是否正确？
+   - `block.gp.list` 是否是正确的列表获取方式？
+   - `block.gp.pos.x(igp_)` 的调用方式是否正确？
+
+4. **循环遍历zone**：
+   ```fish
+   loop foreach local iz_ block.zone.list
+       file.write(fp_stress, block.zone.stress.xx(iz_))
+       ; ...
+   end_loop
+   ```
+   - Zone的应力访问方式是否正确？
+   - 应力分量名称是否正确？（`xx`, `yy`, `zz`, `xy`, `xz`, `yz`）
+
+5. **文件写入操作**：
+   ```fish
+   file.write(fp_nodes, block.gp.pos.x(igp_))
+   file.write(fp_nodes, ' ')
+   file.write(fp_nodes, 13)  ; 换行
+   ```
+   - 写入空格和换行符的方式是否正确？
+   - `13` 是否是正确的换行符代码？（查手册确认）
+
+6. **条件判断**：
+   ```fish
+   if math.abs(rad - 1.0) < 0.1 then
+       ; ...
+   end_if
+   ```
+   - `if` 语句语法是否正确？
+   - `then` 关键字位置是否正确？
+
+7. **数学计算**：
+   ```fish
+   local rad = math.sqrt(block.gp.pos.x(igp_)^2 + block.gp.pos.z(igp_)^2)
+   ```
+   - 幂运算符 `^` 是否正确？
+   - 函数调用方式是否正确？
 
 ### 第四步：修正Python脚本
 
-根据手册和FISH代码，修正 `Elastic_Hole/generate_analytical_solution.py` 中的错误。
+根据手册，修正 `Elastic_Hole/export_to_pinn.py` 中 `create_sample_fish_export_script()` 函数生成的FISH脚本。
 
-**需要检查的关键点**：
-1. ✅ 公式是否与FISH代码完全一致？
-2. ✅ 变量对应关系是否正确？（如 `p1` vs `p2`，哪个是水平应力？）
-3. ✅ 坐标系转换是否正确？（柱坐标 ↔ 笛卡尔坐标）
-4. ✅ 泊松比计算公式是否正确？
-5. ✅ 位移公式中的环向分量 `u_θ` 是否有FISH实现？如果没有，需要从理论推导
+**修正重点**：
+1. ✅ FISH语法完全符合3DEC 7.0规范
+2. ✅ 数据访问方式正确
+3. ✅ 文件I/O操作正确
+4. ✅ 循环和条件语句正确
+5. ✅ 输出格式正确（用于后续Python读取）
 
 ### 第五步：验证修正结果
 
-修正后，确保：
-1. Python脚本可以正常运行
-2. 生成的 `analytical_solution.png` 图片合理（应力集中在孔边缘，远场趋于均匀）
-3. 数值量级合理（位移约毫米级，应力约几十MPa）
+修正后的FISH脚本应该：
+1. 在3DEC中可以正常运行（无语法错误）
+2. 成功导出以下文本文件：
+   - `nodes.txt` - 所有gridpoint的坐标
+   - `displacement.txt` - 所有gridpoint的位移
+   - `stress.txt` - 所有zone的应力
+   - `boundary_hole.txt` - 孔边界节点（r ≈ 1.0m）
+   - `boundary_far.txt` - 远场边界节点（r ≈ 5.0m）
+3. 导出的数据格式正确（空格分隔，每行一个数据点）
 
 ---
 
@@ -101,8 +168,8 @@
 ## 发现的问题
 
 ### 问题1: [问题描述]
-- FISH代码: [相关代码行]
-- Python代码: [对应代码行]
+- 当前FISH代码: [错误的代码行]
+- 3DEC手册说明: [引用手册内容或链接]
 - 错误原因: [说明]
 - 修正方法: [说明]
 
@@ -110,28 +177,49 @@
 ```
 
 ### 2. 修正后的代码
-提供完整修正后的 `generate_analytical_solution.py` 文件
+提供完整修正后的 `export_to_pinn.py` 文件，特别是 `create_sample_fish_export_script()` 函数中生成的FISH脚本部分。
 
 ### 3. 验证说明
-说明如何验证修正是否正确（预期的输出结果）
+说明如何在3DEC中测试修正后的FISH脚本：
+```bash
+# 在3DEC中
+3DEC > call ElasticHole-Hex.dat
+3DEC > model cycle 2000
+3DEC > call export_3dec_data.fis
+# 应该看到 "数据导出完成!" 消息
+# 检查生成的文本文件
+```
 
 ---
 
 ## 注意事项
 
-1. **坐标系统**：3DEC中的 `x`, `y`, `z` 与Python中的柱坐标 `r`, `θ` 的对应关系
-2. **FISH语法**：FISH中的运算符优先级可能与Python不同
-3. **角度单位**：确认FISH中使用弧度还是角度
-4. **应力符号约定**：压应力为正还是负？
+1. **3DEC版本**：本项目使用3DEC 7.0，请参考对应版本的手册
+2. **FISH语法严格性**：FISH对缩进、关键字大小写可能有要求
+3. **数据类型**：确认gridpoint和zone的属性访问方式
+4. **文件路径**：FISH中的文件路径可能需要特殊处理
+5. **注释符号**：FISH使用 `;` 作为注释符号
+
+---
+
+## 参考资料
+
+### 3DEC命令参考
+- Block Gridpoint: https://docs.itascacg.com/3dec700/3dec/docproject/source/manual/block/block_gridpoint.html
+- Block Zone: https://docs.itascacg.com/3dec700/3dec/docproject/source/manual/block/block_zone.html
+
+### FISH编程示例
+在手册中搜索 "FISH example" 或 "loop foreach example"
 
 ---
 
 ## 后续任务提示
 
 修正完成后，我还需要你帮助：
-1. 创建PINN网络结构（基于TensorFlow/PyTorch）
-2. 实现弹性力学的物理损失函数
-3. 优化超参数和网络架构
+1. 验证导出的数据格式是否符合PINN训练要求
+2. 创建PINN网络结构（基于TensorFlow/PyTorch）
+3. 实现弹性力学的物理损失函数
+4. 优化超参数和网络架构
 
 请在完成当前任务后，等待进一步指示。
 
@@ -140,9 +228,16 @@
 ## 开始任务
 
 现在请：
-1. 访问3DEC FISH手册链接
-2. 阅读项目相关文档
-3. 对比FISH代码和Python代码
-4. 提供问题诊断和修正方案
+1. ✅ 访问3DEC FISH手册链接，重点查看：
+   - FISH语言语法
+   - Block gridpoint/zone 数据访问
+   - File I/O 操作
+   - Loop 循环结构
 
-谢谢！
+2. ✅ 打开 `Elastic_Hole/export_to_pinn.py`，分析 `create_sample_fish_export_script()` 函数
+
+3. ✅ 对比手册和代码，找出所有语法/逻辑错误
+
+4. ✅ 提供详细的问题诊断报告和修正后的完整代码
+
+谢谢！🚀
